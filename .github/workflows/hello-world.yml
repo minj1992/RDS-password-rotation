@@ -6,11 +6,10 @@ on:
 jobs:
   job1:
     runs-on:
-      - linux001
-      - selfhosted-runner-linux
-      - X64
+      - self-hosted
       - Linux
-      - selfhosted-runner-linux-001
+      - X64
+      - linux001
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,10 +18,9 @@ jobs:
   job2:
     runs-on:
       - self-hosted
-      - selfhosted-runner-linux
-      - X64
       - Linux
-      - selfhosted-runner-linux-001
+      - X64
+      - linux001
     steps:
       - name: Checkout
         uses: actions/checkout@v4
