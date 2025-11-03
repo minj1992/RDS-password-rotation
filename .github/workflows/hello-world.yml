@@ -2,7 +2,12 @@ name: Connect to AWS and PostgreSQL
 
 on:
   workflow_dispatch:
-
+    inputs:
+      new_db_user:
+        description: 'Username for the new PostgreSQL user to be created'
+        required: true
+        type: string
+        default: 'testuser'
 jobs:
   connect-and-query-db:
     runs-on: ubuntu-latest
@@ -54,3 +59,29 @@ jobs:
                --username="${{ steps.get_secret.outputs.db_user }}" \
                --dbname="postgres" \
                --command="SELECT version();"
+
+      - name: List existing PostgreSQL users
+        env:
+          PGPASSWORD: ${{ steps.get_secret.outputs.db_password }}
+        run: |
+          echo "--- Existing Users ---"
+          psql --host="${{ steps.get_secret.outputs.db_host }}" \
+               --username="${{ steps.get_secret.outputs.db_user }}" \
+               --dbname="postgres" \
+               --command="\du"
+
+      - name: Create new PostgreSQL user
+        env:
+          PGPASSWORD: ${{ steps.get_secret.outputs.db_password }}
+          # The username is taken from the workflow_dispatch input
+          NEW_USER: ${{ github.event.inputs.new_db_user }}
+        run: |
+          echo "Creating user: $NEW_USER"
+          # Generate a secure, random password for the new user
+          NEW_PASSWORD=$(openssl rand -base64 16)
+          echo "::add-mask::$NEW_PASSWORD"
+          echo "Generated Password for $NEW_USER: $NEW_PASSWORD"
+          psql --host="${{ steps.get_secret.outputs.db_host }}" \
+               --username="${{ steps.get_secret.outputs.db_user }}" \
+               --dbname="postgres" \
+               --command="CREATE USER \"$NEW_USER\" WITH PASSWORD '$NEW_PASSWORD';"
