@@ -6,7 +6,7 @@ on:
 jobs:
   job1:
     runs-on:
-      - self-hosted
+      - linux001
       - selfhosted-runner-linux
       - X64
       - Linux
