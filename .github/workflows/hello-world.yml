@@ -1,28 +1,58 @@
-name: Hello World
+name: Connect to AWS and PostgreSQL
 
 on:
   workflow_dispatch:
 
 jobs:
-  job1:
+  connect-and-query-db:
     runs-on:
       - self-hosted
-      # These are the default labels for your runner
       - Linux
       - X64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Job1 message
-        run: echo "Job1 running on self-hosted runner"
-  job2:
-    runs-on:
-      - self-hosted
-      # These are the default labels for your runner
-      - Linux
-      - X64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Job2 message
-        run: echo "Job2 running on self-hosted runner"
+
+      - name: Install dependencies (jq and psql)
+        run: |
+          # Use sudo to install packages on the self-hosted runner
+          # This assumes a Debian/Ubuntu-based Linux distribution
+          sudo apt-get update -y
+          sudo apt-get install -y jq postgresql-client
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Get DB credentials from AWS Secrets Manager
+        id: get_secret
+        run: |
+          # Fetch the secret. The result is a JSON object where the secret's
+          # key-value pairs are inside a JSON string in the 'SecretString' field.
+          SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id /sample/test/value7 --query SecretString --output text)
+
+          # Use jq to parse the JSON string and extract the values.
+          # The '<<-EOF' syntax allows us to pass a multi-line string to a command.
+          # We are setting the values as output parameters for the next step.
+          echo "db_host=$(echo $SECRET_JSON | jq -r .host)" >> $GITHUB_OUTPUT
+          echo "db_user=$(echo $SECRET_JSON | jq -r .master_user)" >> $GITHUB_OUTPUT
+          echo "db_password=$(echo $SECRET_JSON | jq -r .password)" >> $GITHUB_OUTPUT
+
+      - name: Connect to PostgreSQL and show version
+        env:
+          # PGPASSWORD is the standard environment variable for the psql client password.
+          # This is more secure than passing the password on the command line.
+          PGPASSWORD: ${{ steps.get_secret.outputs.db_password }}
+        run: |
+          echo "Connecting to PostgreSQL instance..."
+          
+          # Use the credentials from the previous step to connect.
+          # The '-c' flag executes a single command and exits.
+          # We connect to the default 'postgres' database to run the query.
+          psql --host="${{ steps.get_secret.outputs.db_host }}" \
+               --username="${{ steps.get_secret.outputs.db_user }}" \
+               --dbname="postgres" \
+               --command="SELECT version();"
