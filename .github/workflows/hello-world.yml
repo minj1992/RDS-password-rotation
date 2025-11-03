@@ -5,10 +5,8 @@ on:
 
 jobs:
   connect-and-query-db:
-    runs-on:
-      - self-hosted
-      - Linux
-      - X64
+    runs-on: ubuntu-latest
+    environment: prod
     steps:
       - name: Checkout
         uses: actions/checkout@v4
