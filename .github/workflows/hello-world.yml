@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  say_hello:
+  job1:
     runs-on:
       - self-hosted
       - selfhosted-runner-linux
@@ -14,5 +14,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Say hello
-        run: echo "Hello world from self-hosted runner!"
+      - name: Job1 message
+        run: echo "Job1 running on self-hosted runner"
+  job2:
+    runs-on:
+      - self-hosted
+      - selfhosted-runner-linux
+      - X64
+      - Linux
+      - selfhosted-runner-linux-001
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Job2 message
+        run: echo "Job2 running on self-hosted runner"
