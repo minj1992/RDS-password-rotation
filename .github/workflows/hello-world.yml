@@ -7,7 +7,9 @@ jobs:
   job1:
     runs-on:
       - self-hosted
-      - linux001 # You can target by name/label
+      # These are the default labels for your runner
+      - Linux
+      - X64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -16,7 +18,9 @@ jobs:
   job2:
     runs-on:
       - self-hosted
-      - linux001 # You can target by name/label
+      # These are the default labels for your runner
+      - Linux
+      - X64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
