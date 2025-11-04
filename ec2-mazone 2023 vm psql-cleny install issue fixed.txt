@@ -1,0 +1,110 @@
+name: RDS PASSWORD Rotation
+
+on:
+  workflow_dispatch:
+    inputs:
+      # Action input - only rotate RDS instance user secrets
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - rotate rds instance user secrets
+        default: "rotate rds instance user secrets"
+
+      # AWS credentials
+      AWS_ACCESS_KEY_ID:
+        description: "AWS Access Key ID"
+        required: true
+        default: ""
+      AWS_SECRET_ACCESS_KEY:
+        description: "AWS Secret Access Key"
+        required: true
+        default: ""
+      AWS_SESSION_TOKEN:
+        description: "AWS Session Token"
+        required: true
+        default: ""
+
+      # Conceptual parameters
+      client_name:
+        description: "Client name"
+        required: true
+        default: "san"
+
+      environment:
+        description: "Environment"
+        required: true
+        default: "qa"
+
+jobs:
+  connect-to-master-rds:
+    if: github.event.inputs.action == 'rotate rds instance user secrets'
+    runs-on: "sir-common-runner-ec2"
+    environment: uat
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Install jq and PostgreSQL client on Amazon Linux 2023
+        run: |
+          echo "Installing jq and PostgreSQL client on Amazon Linux 2023..."
+          sudo dnf install -y jq
+      
+          # Add PostgreSQL 16 repository manually (no module system needed)
+          cat << 'EOF' | sudo tee /etc/yum.repos.d/pgdg.repo
+          [pgdg16]
+          name=PostgreSQL 16 for RHEL 9 - x86_64
+          baseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64
+          enabled=1
+          gpgcheck=0
+          EOF
+      
+          # Clean and refresh metadata
+          sudo dnf clean all
+          sudo dnf makecache
+      
+          # Install only the client tools (psql, pg_dump, etc.)
+          sudo dnf install -y postgresql16
+      
+          # Verify installation
+          psql --version
+      
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ github.event.inputs.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ github.event.inputs.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ github.event.inputs.AWS_SESSION_TOKEN }}
+          aws-region: eu-west-1
+
+      - name: Retrieve master DB credentials from AWS Secrets Manager
+        id: get_master_secret
+        run: |
+          SECRET_PATH="/${{ github.event.inputs.client_name }}/${{ github.event.inputs.environment }}/psql/master"
+          echo "Fetching secret from: $SECRET_PATH"
+
+          SECRET_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id "$SECRET_PATH" \
+            --query SecretString \
+            --output text)
+
+          # Mask the password so it never appears in logs
+          DB_PASSWORD=$(echo $SECRET_JSON | jq -r .secret)
+          echo "::add-mask::$DB_PASSWORD"
+
+          echo "db_host=$(echo $SECRET_JSON | jq -r .host)" >> $GITHUB_OUTPUT
+          echo "db_user=$(echo $SECRET_JSON | jq -r .id)" >> $GITHUB_OUTPUT
+          echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
+
+      - name: Connect to Master PostgreSQL and run version check
+        env:
+          PGPASSWORD: ${{ steps.get_master_secret.outputs.db_password }}
+        run: |
+          echo "Connecting to master PostgreSQL instance..."
+          psql --host="${{ steps.get_master_secret.outputs.db_host }}" \
+               --username="${{ steps.get_master_secret.outputs.db_user }}" \
+               --dbname="postgres" \
+               --command="SELECT version();"
